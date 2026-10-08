@@ -1,0 +1,29 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+
+# Type checking / linting cache
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Coverage
+.coverage
+
+# uv
+.python-version
+
+# Advisor plans (local only)
+plans/
+
+# Claude Code local state and agent worktrees
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

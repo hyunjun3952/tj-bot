@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy .
+      - run: uv run pytest
+
+  deploy:
+    needs: check
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      # Forks and fresh clones have no deploy secrets; skip the step instead of failing the run.
+      HAS_DEPLOY_SECRETS: ${{ secrets.DEPLOY_HOST != '' && secrets.DEPLOY_SSH_KEY != '' }}
+    # Queue rather than cancel: a half-finished deploy could leave the VM between reset and restart.
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    steps:
+      - if: env.HAS_DEPLOY_SECRETS == 'true'
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        with:
+          envs: GH_TOKEN,REPO,SHA
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/hyunjun3952/tj-bot
+            run() { sudo -u hyunjun3952 "$@"; }
+            sync() { run bash -lc 'cd /home/hyunjun3952/tj-bot && ~/.local/bin/uv sync --frozen --no-dev'; }
+            # Login failures surface seconds after start, so require the unit to stay active for 30s rather than checking once.
+            healthy() { for _ in $(seq 15); do sleep 2; systemctl is-active --quiet tj-bot || return 1; done; }
+            # The VM holds no GitHub credentials, so fetch over HTTPS with this run's short-lived token instead of via `origin`.
+            fetch() {
+              run env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+                GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+                git fetch "https://github.com/$REPO.git" "$SHA"
+            }
+            prev=$(run git rev-parse HEAD)
+            fetch
+            run git reset --hard "$SHA"
+            sync
+            sudo systemctl restart tj-bot
+            healthy && exit 0
+            echo "tj-bot unhealthy after deploy, rolling back to $prev"
+            run git reset --hard "$prev"
+            sync
+            sudo systemctl restart tj-bot
+            exit 1

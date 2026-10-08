@@ -1,0 +1,72 @@
+[project]
+name = "tj-bot"
+version = "0.1.0"
+description = "TJ Media 반주곡 검색 Discord 봇"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27.0",
+    "beautifulsoup4>=4.15.0",
+    "pydantic>=2.7.0",
+    "python-dotenv>=1.0.1",
+    "discord-py>=2.6",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.0",
+    "pre-commit>=4.0.0",
+    "pytest>=8.0.0",
+    "ruff>=0.16.2",
+    "types-beautifulsoup4>=4.12.0",
+]
+
+[tool.ruff]
+line-length = 150
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["ALL"]
+extend-select = [
+    "ANN401", # `Any` is banned even though the rest of ANN is ignored below
+]
+ignore = [
+    "D",       # docstring
+    "COM812",  # conflicts with the formatter
+    "ISC001",  # conflicts with the formatter
+    "EM101",
+    "EM102",
+    "TRY003",
+    "FIX002",
+    "TD003",
+    "ANN",     # slash-command parameter annotations (Range, Korean names) don't fit ANN
+    "PLR0913", # Discord slash commands inherently take many parameters
+    "S101",    # assert is allowed for internal invariant checks
+    "E501",    # ruff counts each Korean character as width 2, so Korean strings overshoot a 150-column limit
+    "N803",    # Discord slash command parameter names use Korean (must match the option name)
+    "PLC2401", # same reason as above — allow Korean parameter names
+    "CPY001",  # enforcing a copyright header doesn't fit this project's policy
+]
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false # required by skip-magic-trailing-comma
+
+[tool.ruff.lint.per-file-ignores]
+"main.py" = ["INP001"]
+"tj_bot/*" = ["INP001"] # a namespace package on purpose; nothing is installed, main.py runs from the repo root
+"tests/*" = ["INP001", "PLR2004"] # test assertions compare against literal expected values
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = true # collapse anything that fits in 150 columns
+
+[tool.pytest.ini_options]
+pythonpath = ["."] # tj_bot isn't an installed package, so add the repo root for imports
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+explicit_package_bases = true # tj_bot has no __init__.py, so resolve modules from the repo root
+disable_error_code = ["untyped-decorator", "no-untyped-call"]
