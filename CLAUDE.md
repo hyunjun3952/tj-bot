@@ -44,7 +44,7 @@ Conventions the codebase already follows; match them in new code:
 
 ## Commits & PRs
 
-History follows Conventional Commit-style subjects such as `fix(search): guard zero-hit reload` and `perf(client): cache search results`. Keep commits focused and use an imperative, scoped subject where useful. Pull requests should explain the behavior change, mention linked issues, list verification commands, and include screenshots for visible Discord embed or interaction changes.
+Use Conventional Commit-style subjects such as `fix(search): guard zero-hit reload` or `perf(client): cache search results`. Keep commits focused and use an imperative, scoped subject where useful. Pull requests should explain the behavior change, mention linked issues, list verification commands, and include screenshots for visible Discord embed or interaction changes.
 
 ## Security & Configuration
 

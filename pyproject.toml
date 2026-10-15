@@ -26,9 +26,6 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["ALL"]
-extend-select = [
-    "ANN401", # `Any` is banned even though the rest of ANN is ignored below
-]
 ignore = [
     "D",       # docstring
     "COM812",  # conflicts with the formatter
@@ -38,7 +35,6 @@ ignore = [
     "TRY003",
     "FIX002",
     "TD003",
-    "ANN",     # slash-command parameter annotations (Range, Korean names) don't fit ANN
     "PLR0913", # Discord slash commands inherently take many parameters
     "S101",    # assert is allowed for internal invariant checks
     "E501",    # ruff counts each Korean character as width 2, so Korean strings overshoot a 150-column limit
