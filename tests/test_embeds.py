@@ -1,11 +1,16 @@
+import asyncio
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock
+
 import discord
 
 from tj_bot.cogs.recent import _build_embed as build_recent_embed
 from tj_bot.cogs.recent import _filter_songs
 from tj_bot.cogs.search import _build_embed as build_search_embed
-from tj_bot.cogs.search import _selectable_categories
+from tj_bot.cogs.search import _parse_select, _selectable_categories
 from tj_bot.models import MediaBadge, NationType, RecentSong, RecentSongPage, SearchResult, SearchSection, SearchType, Song
-from tj_bot.ui import EMBED_TOTAL_LIMIT, FIELD_VALUE_LIMIT, badge_suffix, enforce_embed_limit
+from tj_bot.ui import EMBED_TOTAL_LIMIT, FIELD_VALUE_LIMIT, BasePaginationView, badge_suffix, enforce_embed_limit
 
 
 def test_badge_suffix_lists_every_flag_in_order() -> None:
@@ -67,3 +72,30 @@ def test_recent_filter_keeps_plain_substring_matching() -> None:
     assert [song.song_number for song in _filter_songs(songs, "love")] == [2]
     assert [song.song_number for song in _filter_songs(songs, "아이")] == [1]
     assert _filter_songs(songs, "") == songs
+
+
+class _StubView(BasePaginationView):
+    async def go_to_page(self, interaction: discord.Interaction, page: int, *, relative: bool = False) -> None: ...
+
+    def _apply_state(self, state: object) -> None: ...
+
+
+def test_resolve_page_clamps_to_range() -> None:
+    view = object.__new__(_StubView)
+    view._page, view._total_pages = 2, 3  # noqa: SLF001
+    assert view._resolve_page(-5, relative=True) == 1  # noqa: SLF001
+    assert view._resolve_page(5, relative=True) == 3  # noqa: SLF001
+    assert view._resolve_page(0, relative=False) == 1  # noqa: SLF001
+    assert view._resolve_page(9, relative=False) == 3  # noqa: SLF001
+
+
+def test_parse_select_rejects_unknown_value() -> None:
+    interaction: Any = SimpleNamespace(followup=SimpleNamespace(send=AsyncMock()))
+
+    async def run() -> None:
+        assert await _parse_select(interaction, "유형", "999", SearchType, SearchType.ALL) is None
+        interaction.followup.send.assert_awaited_once()
+        assert await _parse_select(interaction, "유형", "__all__", SearchType, SearchType.ALL) is SearchType.ALL
+        assert await _parse_select(interaction, "유형", "2", SearchType, SearchType.ALL) is SearchType.ARTIST
+
+    asyncio.run(run())
