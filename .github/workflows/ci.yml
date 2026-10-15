@@ -60,13 +60,17 @@ jobs:
                 git fetch "https://github.com/$REPO.git" "$SHA"
             }
             prev=$(run git rev-parse HEAD)
+            # Also covers a failed sync: set -e would otherwise stop with the checkout on the new commit and the old dependencies.
+            rollback() {
+              echo "deploy failed, rolling back to $prev"
+              run git reset --hard "$prev"
+              sync
+              sudo systemctl restart tj-bot
+              exit 1
+            }
             fetch
             run git reset --hard "$SHA"
-            sync
+            sync || rollback
             sudo systemctl restart tj-bot
             healthy && exit 0
-            echo "tj-bot unhealthy after deploy, rolling back to $prev"
-            run git reset --hard "$prev"
-            sync
-            sudo systemctl restart tj-bot
-            exit 1
+            rollback
