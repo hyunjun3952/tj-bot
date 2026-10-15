@@ -76,8 +76,7 @@ def song_field_value(text: str) -> str:
 class BasePaginationView(discord.ui.View, abc.ABC):
     """Pagination buttons and the state shared across all of them.
 
-    Subclasses each keep their own frozen-dataclass state and hand back a restorer
-    from `_capture_state`.
+    Subclasses each keep their own frozen-dataclass state in `_state`, set only through `_apply_state`.
     """
 
     def __init__(self, *, origin: discord.Interaction, page: int, total_pages: int) -> None:
@@ -100,6 +99,14 @@ class BasePaginationView(discord.ui.View, abc.ABC):
     @abc.abstractmethod
     def _apply_state(self, state: Any) -> None: ...  # noqa: ANN401 — each subclass types its own state
 
+    @abc.abstractmethod
+    def render(self) -> discord.Embed:
+        """The embed for the current state."""
+
+    @abc.abstractmethod
+    def fork(self, origin: discord.Interaction) -> BasePaginationView:
+        """A copy at the current state, owned by `origin`'s user."""
+
     def _capture_state(self) -> Callable[[], None]:
         """Capture the current state; calling the result restores it."""
         return functools.partial(self._apply_state, self._state)
@@ -119,7 +126,11 @@ class BasePaginationView(discord.ui.View, abc.ABC):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self._origin.user.id:
             return True
-        await interaction.response.send_message("명령어를 실행한 사람만 조작할 수 있어요.", ephemeral=True)
+        # Anyone else gets a private copy at the current state, so nobody overwrites the shared message.
+        view = self.fork(interaction)
+        await interaction.response.send_message(
+            "내 화면에서만 보이는 복사본이에요. 여기서 자유롭게 넘겨 보세요.", embed=view.render(), view=view, ephemeral=True
+        )
         return False
 
     def _toggle_item(self, item: discord.ui.Item[Self], *, show: bool) -> None:
@@ -141,9 +152,16 @@ class BasePaginationView(discord.ui.View, abc.ABC):
                 log.exception("Error while handling result interaction")  # view callbacks skip cog_command_error
                 await reply_error(interaction, exc)
 
+    async def _show(self, interaction: discord.Interaction, state: Any) -> None:  # noqa: ANN401 — the subclass's own state
+        if self.is_finished():  # expired while this render waited for the lock; don't re-enable its buttons
+            return
+        self._apply_state(state)
+        await interaction.edit_original_response(embed=self.render(), view=self)
+
     def _update_buttons(self) -> None:
         show = self._total_pages > 1
-        buttons: tuple[discord.ui.Button[Self], ...] = (self.first_button, self.prev_button, self.next_button, self.last_button)
+        # The jump button shares row 0 and is toggled with the others, so re-adding keeps their order.
+        buttons: tuple[discord.ui.Button[Self], ...] = (self.first_button, self.prev_button, self.next_button, self.last_button, self.jump_button)
         for button in buttons:
             self._toggle_item(button, show=show)
         if not show:
@@ -168,6 +186,10 @@ class BasePaginationView(discord.ui.View, abc.ABC):
     async def last_button(self, interaction: discord.Interaction, _button: discord.ui.Button[Self]) -> None:
         await self.go_to_page(interaction, self._total_pages)
 
+    @discord.ui.button(label="페이지 이동", style=discord.ButtonStyle.secondary, row=0)
+    async def jump_button(self, interaction: discord.Interaction, _button: discord.ui.Button[Self]) -> None:
+        await interaction.response.send_modal(JumpModal(self))
+
     def _schedule_expire(self) -> None:
         self._expire_task = asyncio.create_task(self._expire())  # kept so the task isn't garbage-collected mid-run
 
@@ -180,3 +202,36 @@ class BasePaginationView(discord.ui.View, abc.ABC):
                     child.disabled = True
             with contextlib.suppress(discord.HTTPException):
                 await self._origin.edit_original_response(view=self)
+
+
+async def reject_expired(interaction: discord.Interaction, owner: BasePaginationView, /) -> bool:
+    """Modals have no timeout, so one opened before the view expired can still be submitted after."""
+    if not owner.is_finished():
+        return False
+    await interaction.response.send_message("시간이 지나 만료됐어요. 명령어를 다시 실행해 주세요.", ephemeral=True)
+    return True
+
+
+class JumpModal(discord.ui.Modal):
+    """The input form for jumping straight to a page number; long lists make the buttons alone slow."""
+
+    def __init__(self, owner: BasePaginationView) -> None:
+        super().__init__(title="페이지 이동")
+        self._owner = owner
+        self._page_input: discord.ui.TextInput[Self] = discord.ui.TextInput(
+            label=f"이동할 페이지 (1~{owner.total_pages})", placeholder=str(owner.page), required=True, max_length=6
+        )
+        self.add_item(self._page_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if await reject_expired(interaction, self._owner):
+            return
+        raw = self._page_input.value.strip()
+        if not raw.isdecimal():
+            await interaction.response.send_message("숫자만 입력해 주세요.", ephemeral=True)
+            return
+        page = int(raw)
+        if not 1 <= page <= self._owner.total_pages:
+            await interaction.response.send_message(f"1 ~ {self._owner.total_pages} 사이 페이지를 입력해 주세요.", ephemeral=True)
+            return
+        await self._owner.go_to_page(interaction, page)

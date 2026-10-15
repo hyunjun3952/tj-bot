@@ -115,21 +115,12 @@ class _ViewState:
 
 
 class SearchPaginationView(BasePaginationView):
-    def __init__(self, *, origin: discord.Interaction, client: TJMediaClient, query: str, display_query: str, result: SearchResult) -> None:
-        super().__init__(origin=origin, page=result.page, total_pages=result.total_pages)
+    def __init__(self, *, origin: discord.Interaction, client: TJMediaClient, origin_query: str, state: _ViewState) -> None:
+        super().__init__(origin=origin, page=state.result.page, total_pages=state.result.total_pages)
         self._client = client
-        self._origin_query = query
-        self._origin_display_query = display_query
-        self._apply_state(
-            _ViewState(
-                query=query,
-                display_query=display_query,
-                search_type=SearchType.ALL,
-                nation=NationType.ALL,
-                result=result,
-                categories=_selectable_categories(result),
-            )
-        )
+        # The query the command resolved to; switching category always starts again from it.
+        self._origin_query = origin_query
+        self._apply_state(state)
 
     # Options are filled in by the _sync_* methods; Discord rejects a select that is sent without any, so they're hidden until then.
     @discord.ui.select(cls=discord.ui.Select, options=[], row=2)
@@ -196,14 +187,14 @@ class SearchPaginationView(BasePaginationView):
         )
         await self._show(interaction, state)
 
-    async def _show(self, interaction: discord.Interaction, state: _ViewState) -> None:
-        if self.is_finished():  # expired while this render waited for the lock; don't re-enable its buttons
-            return
-        self._apply_state(state)
-        embed = _build_embed(
+    def render(self) -> discord.Embed:
+        state = self._state
+        return _build_embed(
             state.result, display_query=state.display_query, resolved_query=state.query, search_type=state.search_type, nation=state.nation
         )
-        await interaction.edit_original_response(embed=embed, view=self)
+
+    def fork(self, origin: discord.Interaction) -> SearchPaginationView:
+        return SearchPaginationView(origin=origin, client=self._client, origin_query=self._origin_query, state=self._state)
 
     async def go_to_page(self, interaction: discord.Interaction, page: int, *, relative: bool = False) -> None:
         async with self._guarded_render(interaction):
@@ -218,7 +209,7 @@ class SearchPaginationView(BasePaginationView):
             if (search_type := await _parse_select(interaction, "유형", value, SearchType, SearchType.ALL)) is None:
                 return
             await self._reload(
-                interaction, query=self._origin_query, display_query=self._origin_display_query, search_type=search_type, nation=self._state.nation
+                interaction, query=self._origin_query, display_query=self._state.display_query, search_type=search_type, nation=self._state.nation
             )
 
     async def switch_nation(self, interaction: discord.Interaction, value: str) -> None:
@@ -235,20 +226,48 @@ def _cooldown_key(interaction: discord.Interaction) -> int | None:
     return interaction.user.id if str(getattr(interaction.namespace, "검색어", "")).strip() else None
 
 
+_SEARCH_TYPE_CHOICES = [app_commands.Choice(name=search_type.label, value=search_type.value) for search_type in SearchType]
+# Discord rejects an empty choice value, so 전체 travels as the reset sentinel.
+_NATION_CHOICES = [app_commands.Choice(name=nation.label, value=nation.value or _RESET_VALUE) for nation in NationType]
+
+
 class SearchCog(TJCog):
     @app_commands.command(name="검색", description="TJ 미디어에서 노래를 검색해요")
-    @app_commands.guild_only()
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.checks.cooldown(1, 5, key=_cooldown_key)  # one zero-hit search fans out to ~6 TJ requests behind a shared semaphore
-    @app_commands.describe(검색어="곡명, 가수명, 곡번호 (초성 ㅇㅇㅇ, 일본곡은 한글 발음·로마자도 가능)")
-    async def search(self, interaction: discord.Interaction, 검색어: app_commands.Range[str, 1, QUERY_LIMIT]) -> None:
+    @app_commands.describe(
+        검색어="곡명, 가수명, 곡번호 (초성 ㅇㅇㅇ, 일본곡은 한글 발음·로마자도 가능)",
+        유형="처음부터 이 유형으로만 찾아요",
+        곡분류="처음부터 이 분류로만 찾아요",
+    )
+    @app_commands.choices(유형=_SEARCH_TYPE_CHOICES, 곡분류=_NATION_CHOICES)
+    async def search(
+        self,
+        interaction: discord.Interaction,
+        검색어: app_commands.Range[str, 1, QUERY_LIMIT],
+        유형: str = SearchType.ALL.value,
+        곡분류: str = _RESET_VALUE,
+    ) -> None:
         # A public defer makes the first followup ignore ephemeral, so finish input validation first.
         if not 검색어.strip():
             await interaction.response.send_message("검색어를 입력해 주세요.", ephemeral=True)
             return
 
+        search_type = SearchType(유형)  # Discord only sends the declared choices
+        nation = NationType.ALL if 곡분류 == _RESET_VALUE else NationType(곡분류)
         await interaction.response.defer()
-        result = await self._client.search(검색어)
+        result = await self._client.search(검색어, search_type=search_type, nation=nation)
         resolved_query = result.matched_query or 검색어  # pagination uses the query that hit
-        embed = _build_embed(result, display_query=검색어, resolved_query=resolved_query, search_type=SearchType.ALL, nation=NationType.ALL)
-        view = SearchPaginationView(origin=interaction, client=self._client, query=resolved_query, display_query=검색어, result=result)
-        await interaction.followup.send(embed=embed, view=view)
+        # A narrowed start still needs the combined result to fill the 유형 menu, same as switching category later (cached).
+        combined = result if search_type is SearchType.ALL else await self._client.search(resolved_query, nation=nation)
+        state = _ViewState(
+            query=resolved_query,
+            display_query=검색어,
+            search_type=search_type,
+            nation=nation,
+            result=result,
+            categories=_selectable_categories(combined),
+        )
+        view = SearchPaginationView(origin=interaction, client=self._client, origin_query=resolved_query, state=state)
+        await interaction.followup.send(embed=view.render(), view=view)

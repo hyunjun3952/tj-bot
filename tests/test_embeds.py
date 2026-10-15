@@ -7,8 +7,9 @@ import discord
 
 from tj_bot.cogs.recent import _build_embed as build_recent_embed
 from tj_bot.cogs.recent import _filter_songs
+from tj_bot.cogs.search import SearchPaginationView, _parse_select, _selectable_categories
 from tj_bot.cogs.search import _build_embed as build_search_embed
-from tj_bot.cogs.search import _parse_select, _selectable_categories
+from tj_bot.cogs.search import _ViewState as _SearchViewState
 from tj_bot.models import MediaBadge, NationType, RecentSong, RecentSongPage, SearchResult, SearchSection, SearchType, Song
 from tj_bot.ui import EMBED_TOTAL_LIMIT, FIELD_VALUE_LIMIT, BasePaginationView, badge_suffix, enforce_embed_limit
 
@@ -79,6 +80,10 @@ class _StubView(BasePaginationView):
 
     def _apply_state(self, state: object) -> None: ...
 
+    def render(self) -> discord.Embed: ...
+
+    def fork(self, origin: discord.Interaction) -> BasePaginationView: ...
+
 
 def test_resolve_page_clamps_to_range() -> None:
     view = object.__new__(_StubView)
@@ -97,5 +102,37 @@ def test_parse_select_rejects_unknown_value() -> None:
         interaction.followup.send.assert_awaited_once()
         assert await _parse_select(interaction, "유형", "__all__", SearchType, SearchType.ALL) is SearchType.ALL
         assert await _parse_select(interaction, "유형", "2", SearchType, SearchType.ALL) is SearchType.ARTIST
+
+    asyncio.run(run())
+
+
+def test_fallback_month_is_explained() -> None:
+    page = RecentSongPage(year=2026, month=9, songs=(_recent(1, "좋은 날", "아이유"),), is_fallback=True)
+    assert "지난달" in (build_recent_embed(page, page.songs, 1, filter_query="").description or "")
+    assert build_recent_embed(page.model_copy(update={"is_fallback": False}), page.songs, 1, filter_query="").description is None
+
+
+def test_search_view_can_start_narrowed() -> None:
+    songs = tuple(Song(song_number=number, title=f"곡{number}", artist="아이유") for number in range(1, 11))
+    result = SearchResult(sections=(SearchSection(category="가수", songs=songs, search_type=SearchType.ARTIST),), page=1, total_pages=3)
+    state = _SearchViewState(
+        query="아이유",
+        display_query="아이유",
+        search_type=SearchType.ARTIST,
+        nation=NationType.KOREAN,
+        result=result,
+        categories=(SearchType.TITLE, SearchType.ARTIST),
+    )
+    origin: Any = SimpleNamespace(created_at=discord.utils.utcnow(), user=SimpleNamespace(id=1))
+
+    async def run() -> None:
+        view = SearchPaginationView(origin=origin, client=AsyncMock(), origin_query="아이유", state=state)
+        assert [option.default for option in view.category_select.options] == [False, False, True]  # reset, 곡제목, 가수명
+        assert next(option for option in view.nation_select.options if option.default).label == "가요"
+        assert view.jump_button in view.children
+        assert view.render().footer.text == "페이지 1 / 3 · 가수명 · 가요"
+        fork = view.fork(origin)
+        assert fork is not view
+        assert fork.render().footer.text == view.render().footer.text
 
     asyncio.run(run())
