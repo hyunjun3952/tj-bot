@@ -18,7 +18,7 @@
 Python 3.12 이상과 [uv](https://docs.astral.sh/uv/)가 필요해요.
 
 1. [Discord Developer Portal](https://discord.com/developers/applications)에서 봇을 만들고 토큰을 발급해요. Privileged Intent는 필요 없어요.
-2. OAuth2 스코프 `bot`, `applications.commands`로 초대 링크를 만들어 서버에 초대해요. DM이나 봇이 없는 서버에서도 쓰려면 Installation 탭에서 **User Install**을 켜요.
+2. OAuth2 스코프 `bot`, `applications.commands`로 초대 링크를 만들어 서버에 초대해요.
 3. 저장소 루트에 `.env`를 만들어요.
 
    ```env

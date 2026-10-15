@@ -233,8 +233,7 @@ _NATION_CHOICES = [app_commands.Choice(name=nation.label, value=nation.value or 
 
 class SearchCog(TJCog):
     @app_commands.command(name="검색", description="TJ 미디어에서 노래를 검색해요")
-    @app_commands.allowed_installs(guilds=True, users=True)
-    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=_cooldown_key)  # one zero-hit search fans out to ~6 TJ requests behind a shared semaphore
     @app_commands.describe(
         검색어="곡명, 가수명, 곡번호 (초성 ㅇㅇㅇ, 일본곡은 한글 발음·로마자도 가능)",

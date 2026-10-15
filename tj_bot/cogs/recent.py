@@ -121,8 +121,7 @@ class RecentSongPaginationView(BasePaginationView):
 
 class RecentSongCog(TJCog):
     @app_commands.command(name="최신곡", description="TJ 미디어의 이번 달 최신곡을 보여줘요")
-    @app_commands.allowed_installs(guilds=True, users=True)
-    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.guild_only()
     async def recent_songs(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
 
