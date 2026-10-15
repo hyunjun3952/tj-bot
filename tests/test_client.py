@@ -230,8 +230,30 @@ def test_stale_recent_songs_served_when_refresh_fails() -> None:
             client = TJMediaClient(http=http)
             await client.get_recent_songs()
             assert client._recent is not None  # noqa: SLF001
-            client._recent = (client._recent[0], 0.0)  # noqa: SLF001
+            client._recent = (*client._recent[:2], 0.0)  # noqa: SLF001
             ok = False
             return len((await client.get_recent_songs()).songs)
 
     assert asyncio.run(run()) == 1
+
+
+def test_empty_month_falls_back_to_last_month_and_is_cached() -> None:
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(dict(httpx.QueryParams(request.content.decode()))["searchYm"])
+        items = [{"pro": 12345, "indexTitle": "곡", "indexSong": "가수"}] if len(requested) > 1 else []
+        return httpx.Response(200, json={"resultCode": "99", "resultData": {"items": items}})
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            client = TJMediaClient(http=http)
+            page = await client.get_recent_songs()
+            assert page.is_fallback
+            assert [song.song_number for song in page.songs] == [12345]
+            assert f"{page.year:04d}{page.month:02d}" == requested[1]
+            assert await client.get_recent_songs() is page
+
+    asyncio.run(run())
+    assert len(requested) == 2
+    assert requested[0] != requested[1]

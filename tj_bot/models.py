@@ -151,3 +151,5 @@ class RecentSongPage(pydantic.BaseModel):
     year: int
     month: int
     songs: tuple[RecentSong, ...]
+    # True when this month had nothing yet and last month's list stands in.
+    is_fallback: bool = False

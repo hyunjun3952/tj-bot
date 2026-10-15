@@ -135,7 +135,7 @@ class TJMediaClient:
         self._owns_http = http is None
         self._http = http if http is not None else httpx.AsyncClient(headers=_HEADERS, follow_redirects=True, timeout=_DEFAULT_TIMEOUT)
         self._fetch_slots = asyncio.Semaphore(_MAX_CONCURRENT_FETCHES)
-        self._recent: tuple[RecentSongPage, float] | None = None
+        self._recent: tuple[str, RecentSongPage, float] | None = None
         self._recent_lock = asyncio.Lock()
         self._recent_failure: tuple[str, float] | None = None
         # -inf, not 0.0: monotonic() can be under _SESSION_FRESH on a freshly booted host, faking a fresh cookie.
@@ -284,26 +284,35 @@ class TJMediaClient:
         """Fetch this month's (KST) recent songs."""
         async with self._recent_lock:  # month can roll over while waiting, so compute time after
             now = datetime.datetime.now(tz=_KST)
-            if self._recent is not None:
-                cached, expires_at = self._recent
-                if (cached.year, cached.month) == (now.year, now.month) and expires_at > time.monotonic():
-                    return cached  # frozen, so safe to hand out as-is
+            # Keyed by the requested month, not the page's: a fallback page is last month's and would never match.
+            month = now.strftime("%Y%m")
+            stale: RecentSongPage | None = None
+            if self._recent is not None and self._recent[0] == month:
+                _, stale, expires_at = self._recent
+                if expires_at > time.monotonic():
+                    return stale  # frozen, so safe to hand out as-is
             if self._recent_failure is not None and self._recent_failure[1] > time.monotonic():
-                if self._recent is not None and (self._recent[0].year, self._recent[0].month) == (now.year, now.month):
-                    return self._recent[0]
+                if stale is not None:
+                    return stale
                 raise TJMediaError(self._recent_failure[0])
 
             try:
-                songs = await self._fetch_recent_songs(f"{now.year:04d}{now.month:02d}")
+                page = await self._fetch_recent_page(now)
+                # Early in the month TJ has nothing listed yet; last month's list is what "recent" means then.
+                if not page.songs and (previous := await self._fetch_recent_page(now.replace(day=1) - datetime.timedelta(days=1))).songs:
+                    page = previous.model_copy(update={"is_fallback": True})
             except TJMediaError as exc:
                 self._recent_failure = (str(exc), time.monotonic() + _RECENT_FAILURE_TTL)
                 # An expired list from this month still beats an error while TJ is down.
-                if self._recent is not None and (self._recent[0].year, self._recent[0].month) == (now.year, now.month):
-                    return self._recent[0]
+                if stale is not None:
+                    return stale
                 raise
-            page = RecentSongPage(year=now.year, month=now.month, songs=tuple(songs))
-            self._recent = (page, time.monotonic() + _RECENT_SONGS_TTL)
+            self._recent = (month, page, time.monotonic() + _RECENT_SONGS_TTL)
             return page
+
+    async def _fetch_recent_page(self, day: datetime.datetime) -> RecentSongPage:
+        songs = await self._fetch_recent_songs(day.strftime("%Y%m"))
+        return RecentSongPage(year=day.year, month=day.month, songs=tuple(songs))
 
     async def _fetch_recent_songs(self, search_ym: str) -> list[RecentSong]:
         response = await self._fetch(
