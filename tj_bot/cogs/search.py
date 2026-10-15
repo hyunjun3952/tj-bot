@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import dataclasses
-import functools
 import logging
 from enum import StrEnum
 from typing import TYPE_CHECKING, Self
@@ -27,8 +26,6 @@ from tj_bot.ui import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from tj_bot.client import TJMediaClient
     from tj_bot.models import SearchResult, SearchSection, Song
 
@@ -64,7 +61,7 @@ def _empty_description(nation: NationType) -> str:
 def _build_embed(result: SearchResult, *, display_query: str, resolved_query: str, search_type: SearchType, nation: NationType) -> discord.Embed:
     embed = discord.Embed(title="TJ 검색 결과", color=0x00BFFF)
     embed.set_footer(text=f"페이지 {result.page} / {result.total_pages} · {search_type.label} · {nation.label}")
-    notes = [f"결과가 없어서 “{resolved_query}”(으)로 찾았어요."] if resolved_query != display_query else []
+    notes = [f"결과가 없어서 “{escape_markdown(resolved_query)}”(으)로 찾았어요."] if resolved_query != display_query else []
 
     if result.is_empty:
         embed.description = "\n\n".join([*notes, _empty_description(nation)])
@@ -169,9 +166,6 @@ class SearchPaginationView(BasePaginationView):
             for nation in NationType
         ]
         self._toggle_item(self.nation_select, show=True)
-
-    def _capture_state(self) -> Callable[[], None]:
-        return functools.partial(self._apply_state, self._state)
 
     def _apply_state(self, state: _ViewState) -> None:
         self._state = state

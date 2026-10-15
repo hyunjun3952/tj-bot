@@ -3,8 +3,9 @@ from __future__ import annotations
 import abc
 import asyncio
 import contextlib
+import functools
 import logging
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
 
 import discord
 
@@ -88,6 +89,7 @@ class BasePaginationView(discord.ui.View, abc.ABC):
         # Count from the command, not from here: a slow TJ fetch before the view exists eats into the token's lifetime.
         elapsed = (discord.utils.utcnow() - origin.created_at).total_seconds()
         asyncio.get_running_loop().call_later(max(0.0, _VIEW_LIFETIME - elapsed), self._schedule_expire)
+        self._state: Any = None  # set by the subclass's _apply_state
         self._page = page
         self._total_pages = total_pages
         self._update_buttons()
@@ -96,8 +98,11 @@ class BasePaginationView(discord.ui.View, abc.ABC):
     async def go_to_page(self, interaction: discord.Interaction, page: int, *, relative: bool = False) -> None: ...
 
     @abc.abstractmethod
+    def _apply_state(self, state: Any) -> None: ...  # noqa: ANN401 — each subclass types its own state
+
     def _capture_state(self) -> Callable[[], None]:
         """Capture the current state; calling the result restores it."""
+        return functools.partial(self._apply_state, self._state)
 
     @property
     def page(self) -> int:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import dataclasses
-import functools
 from typing import TYPE_CHECKING, Self
 
 import discord
@@ -13,8 +12,6 @@ from tj_bot.models import ROWS_PER_PAGE, choseong, compact, is_choseong_query
 from tj_bot.ui import QUERY_LIMIT, BasePaginationView, enforce_embed_limit, escape_or, song_field_name, song_field_value
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from tj_bot.models import RecentSong, RecentSongPage
 
 
@@ -121,9 +118,6 @@ class RecentSongPaginationView(BasePaginationView):
         self._result = result
         self._state = _ViewState(songs=result.songs, filter_query="", page=1)
         self._sync_jump_button()
-
-    def _capture_state(self) -> Callable[[], None]:
-        return functools.partial(self._apply_state, self._state)
 
     @discord.ui.button(label="페이지 이동", style=discord.ButtonStyle.secondary, row=1)
     async def jump_button(self, interaction: discord.Interaction, _button: discord.ui.Button[Self]) -> None:
