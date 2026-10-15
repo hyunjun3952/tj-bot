@@ -13,8 +13,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "mypy>=2.3.0",
     "pre-commit>=4.0.0",
+    "pyrefly>=1.3.2",
     "pytest>=8.0.0",
     "ruff>=0.16.2",
     "types-beautifulsoup4>=4.12.0",
@@ -63,10 +63,6 @@ skip-magic-trailing-comma = true # collapse anything that fits in 150 columns
 [tool.pytest.ini_options]
 pythonpath = ["."] # tj_bot isn't an installed package, so add the repo root for imports
 
-[tool.mypy]
-python_version = "3.12"
-strict = true
-warn_return_any = true
-warn_unused_configs = true
-explicit_package_bases = true # tj_bot has no __init__.py, so resolve modules from the repo root
-disable_error_code = ["untyped-decorator", "no-untyped-call"]
+[tool.pyrefly]
+python-version = "3.12"
+project-includes = ["."]

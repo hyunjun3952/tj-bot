@@ -44,7 +44,7 @@ Python 3.12 이상과 [uv](https://docs.astral.sh/uv/)가 필요해요.
 ```sh
 uv run ruff check .
 uv run ruff format --check .
-uv run mypy .
+uv run pyrefly check
 uv run pytest
 ```
 

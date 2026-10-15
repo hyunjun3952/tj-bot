@@ -20,9 +20,9 @@ repos:
         entry: uv run ruff format
         language: system
         types: [python]
-      - id: mypy
-        name: mypy
-        entry: uv run mypy .
+      - id: pyrefly
+        name: pyrefly
+        entry: uv run pyrefly check
         language: system
         types: [python]
         pass_filenames: false

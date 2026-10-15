@@ -8,7 +8,6 @@ __pycache__/
 .venv/
 
 # Type checking / linting cache
-.mypy_cache/
 .ruff_cache/
 .pytest_cache/
 

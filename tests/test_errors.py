@@ -50,5 +50,5 @@ def test_reply_error_uses_initial_response_when_not_done() -> None:
 def test_interaction_check_allows_only_the_requester(user_id: int, *, allowed: bool) -> None:
     view = SimpleNamespace(_origin=SimpleNamespace(user=SimpleNamespace(id=1)))
     interaction = _interaction(done=False, user_id=user_id)
-    assert asyncio.run(BasePaginationView.interaction_check(view, interaction)) is allowed  # type: ignore[arg-type]
+    assert asyncio.run(BasePaginationView.interaction_check(view, interaction)) is allowed  # pyrefly: ignore[bad-argument-type]
     assert interaction.response.send_message.await_count == (not allowed)

@@ -11,7 +11,7 @@ import discord
 from tj_bot.errors import reply_error
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable
+    from collections.abc import AsyncGenerator, Callable
 
     from tj_bot.models import MediaBadge
 
@@ -47,7 +47,7 @@ def enforce_embed_limit(embed: discord.Embed, /) -> discord.Embed:
             break
         field = embed.fields[index]
         value = field.value or ""
-        embed.set_field_at(index, name=field.name, value=truncate(value, max(1, len(value) - overflow)), inline=bool(field.inline))
+        embed.set_field_at(index, name=field.name, value=truncate(value, max(1, len(value) - overflow)), inline=field.inline)
 
     while len(embed) > EMBED_TOTAL_LIMIT and embed.fields:
         embed.remove_field(-1)
@@ -124,7 +124,7 @@ class BasePaginationView(discord.ui.View, abc.ABC):
             self.remove_item(item)
 
     @contextlib.asynccontextmanager
-    async def _guarded_render(self, interaction: discord.Interaction) -> AsyncIterator[None]:
+    async def _guarded_render(self, interaction: discord.Interaction) -> AsyncGenerator[None]:
         """Defer, serialize via the interaction lock, and roll back + reply_error on any exception."""
         await interaction.response.defer()
         async with self._interaction_lock:

@@ -40,7 +40,7 @@ async def main() -> None:
     token = os.environ["DISCORD_TOKEN"]  # read before the TJ session fetch so a missing token fails fast
     guild_id = os.getenv("GUILD_ID")
     # systemd restarts send SIGTERM, which would skip the finally below; cancelling this task routes it through the same path as Ctrl+C.
-    asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, asyncio.current_task().cancel)  # type: ignore[union-attr]
+    asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, asyncio.current_task().cancel)  # pyrefly: ignore[missing-attribute]
 
     async with TJMediaClient() as tj_client:
         bot = TJBot(tj_client, int(guild_id) if guild_id else None)

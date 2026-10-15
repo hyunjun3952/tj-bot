@@ -21,12 +21,12 @@ Slash commands live under `tj_bot/cogs/`: `__init__.py` holds the `TJCog` base c
 - `uv run python main.py` starts the bot locally.
 - `uv run ruff check .` applies the repository's lint rules.
 - `uv run ruff format --check .` verifies formatting without rewriting files.
-- `uv run mypy .` performs strict type checking.
+- `uv run pyrefly check` performs type checking.
 - `uv run pytest` runs the regression tests in `tests/`.
 - `uv run --with pytest-cov pytest --cov=tj_bot --cov-report=term-missing` measures coverage on demand. It is deliberately not a dependency or CI gate: the parser, translit, and models are near 100%, and the uncovered rest is mostly Discord interaction code not worth mocking.
-- `uv run pre-commit install` sets up git hooks (ruff, mypy, and basic hygiene checks) to run automatically on `git commit`.
+- `uv run pre-commit install` sets up git hooks (ruff, pyrefly, and basic hygiene checks) to run automatically on `git commit`.
 
-Run all four checks (Ruff lint, Ruff format, mypy, pytest) before opening a pull request; CI runs the same set.
+Run all four checks (Ruff lint, Ruff format, pyrefly, pytest) before opening a pull request; CI runs the same set.
 
 ## Style
 
